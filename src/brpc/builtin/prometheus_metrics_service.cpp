@@ -50,18 +50,19 @@ public:
     explicit PrometheusMetricsDumper(butil::IOBufBuilder* os,
                                      const std::string& server_prefix)
         : _os(os)
+        , _comment_dumped(false)
         , _server_prefix(server_prefix) {
     }
 
     bool dump(const std::string& name, const butil::StringPiece& desc) override;
-
+    bool dump_comment(const std::string& name, const std::string& type) override ;
 private:
     DISALLOW_COPY_AND_ASSIGN(PrometheusMetricsDumper);
 
     // Return true iff name ends with suffix output by LatencyRecorder.
     bool DumpLatencyRecorderSuffix(const butil::StringPiece& name,
                                    const butil::StringPiece& desc);
-
+    bool ContainLatencyRecordSuffix(const butil::StringPiece& name);
     // 6 is the number of bvars in LatencyRecorder that indicating percentiles
     static const int NPERCENTILES = 6;
 
@@ -78,9 +79,20 @@ private:
 
 private:
     butil::IOBufBuilder* _os;
+    bool _comment_dumped;
     const std::string _server_prefix;
     std::map<std::string, SummaryItems> _m;
 };
+bool PrometheusMetricsDumper::dump_comment(const std::string& name, const std::string& type) {
+    if (ContainLatencyRecordSuffix(name)) {
+        // Has encountered name with suffix exposed by LatencyRecorder,
+        // Leave it to DumpLatencyRecorderSuffix to output Summary.
+        return true;
+    }
+     *_os << "# HELP " << name << '\n'
+         << "# TYPE " << name << " " << type << '\n';
+    return true;
+}
 
 bool PrometheusMetricsDumper::dump(const std::string& name,
                                    const butil::StringPiece& desc) {
@@ -93,9 +105,7 @@ bool PrometheusMetricsDumper::dump(const std::string& name,
         // Leave it to DumpLatencyRecorderSuffix to output Summary.
         return true;
     }
-    *_os << "# HELP " << name << '\n'
-         << "# TYPE " << name << " gauge" << '\n'
-         << name << " " << desc << '\n';
+    *_os << name << " " << desc << '\n';
     return true;
 }
 
@@ -140,6 +150,12 @@ PrometheusMetricsDumper::ProcessLatencyRecorderSuffix(const butil::StringPiece& 
         return si;
     }
     return NULL;
+}
+bool PrometheusMetricsDumper::ContainLatencyRecordSuffix(const butil::StringPiece& name) {
+    if (name.starts_with(_server_prefix) && name.find_last_of("latency") != std::string::npos) {
+        return true;
+    }
+    return false;
 }
 
 bool PrometheusMetricsDumper::DumpLatencyRecorderSuffix(

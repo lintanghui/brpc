@@ -500,6 +500,9 @@ int Variable::dump_exposed(Dumper* dumper, const DumpOptions* poptions) {
                 if (log_dummped) {
                     dumpped_info << '\n' << name << ": " << streambuf.data();
                 }
+                if (!dumper->dump_comment(name, "gauge")) {
+                    return -1;
+                }
                 if (!dumper->dump(name, streambuf.data())) {
                     return -1;
                 }
